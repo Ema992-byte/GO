@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>POS Móvil - GO!</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Supabase JS -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- QuaggaJS para escaneo -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+  <!-- Enlace PWA Manifest -->
+  <link rel="manifest" href="manifest.json">
+</head>
+<body class="bg-slate-100 min-h-screen flex flex-col items-center justify-center p-4">
+
+  <!-- INDICADOR DE ESTADO DE RED -->
+  <div id="estadoRed" class="w-full max-w-6xl mb-2 text-center text-xs font-bold py-1 rounded hidden"></div>
+
+  <!-- PANTALLA DE INICIO DE SESIÓN -->
+  <div id="loginSection" class="bg-white p-8 rounded-2xl shadow-lg w-full max-w-md">
+    <h2 class="text-3xl font-extrabold text-center text-slate-800 mb-6 tracking-tight">GO! 🛒</h2>
+    <form id="loginForm" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-slate-600 mb-1">Correo Electrónico</label>
+        <input type="email" id="email" required placeholder="admi@pos.com ó vendedor@pos.com"
+          class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-600 mb-1">Contraseña</label>
+        <input type="password" id="password" required placeholder="••••••••"
+          class="w-full px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+      </div>
+      <button type="submit" id="btnLogin"
+        class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-lg transition-colors shadow">
+        Ingresar al POS GO!
+      </button>
+    </form>
+  </div>
+
+  <!-- PANTALLA PRINCIPAL DEL POS -->
+  <div id="posSection" class="hidden bg-white p-6 rounded-2xl shadow-lg w-full max-w-6xl">
+    <div class="flex justify-between items-center mb-6 border-b pb-4 flex-wrap gap-2">
+      <div>
+        <h1 class="text-2xl font-black text-slate-800 tracking-wide">GO! POS 📱</h1>
+        <p id="usuarioRol" class="text-xs font-medium text-indigo-600 mt-0.5"></p>
+      </div>
+
+      <div class="flex gap-2 flex-wrap items-center">
+        <div id="contenedorMenuAdmin" class="relative hidden">
+          <button id="btnMenuAdmin" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm font-medium shadow flex items-center gap-1">
+            <span>⚙️ Módulos Admin</span>
+            <span class="text-xs">▼</span>
+          </button>
+
+          <div id="dropdownMenuAdmin" class="hidden absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 z-50 overflow-hidden text-xs py-1">
+            <button id="btnAdminNuevoProd" class="w-full text-left px-4 py-2.5 hover:bg-slate-50 text-slate-700 font-medium flex items-center gap-2 border-b">
+              <span>➕</span> Nuevo Producto
+            </button>
+            <button id="btnAdminRegCompra" class="w-full text-left px-4 py-2.5 hover:bg-slate-50 text-emerald-700 font-medium flex items-center gap-2 border-b">
+              <span>📥</span> Registrar Factura de Compra
+            </button>
+            <button id="btnAdminCargaMasiva" class="w-full text-left px-4 py-2.5 hover:bg-slate-50 text-teal-700 font-medium flex items-center gap-2 border-b">
+              <span>📄</span> Carga Masiva (Actualizar CSV)
+            </button>
+            <button id="btnAdminExportar" class="w-full text-left px-4 py-2.5 hover:bg-slate-50 text-indigo-700 font-medium flex items-center gap-2 border-b">
+              <span>📦</span> Exportar Productos
+            </button>
+            <button id="btnAdminModPrecios" class="w-full text-left px-4 py-2.5 hover:bg-slate-50 text-purple-700 font-medium flex items-center gap-2 border-b">
+              <span>✏️</span> Modificar Precios
+            </button>
+            <button id="btnAdminReporte" class="w-full text-left px-4 py-2.5 hover:bg-slate-50 text-amber-700 font-medium flex items-center gap-2">
+              <span>📊</span> Reporte de Ventas
+            </button>
+          </div>
+        </div>
+
+        <button id="btnHistorial" class="bg-sky-600 hover:bg-sky-700 text-white px-3 py-2 rounded-lg text-sm font-medium">📜 Historial</button>
+        <button id="btnSalir" class="bg-rose-500 hover:bg-rose-600 text-white px-3 py-2 rounded-lg text-sm font-medium">Salir</button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="flex flex-col h-[560px] md:col-span-2">
+        <div class="flex justify-between items-center mb-2">
+          <h3 class="text-lg font-semibold text-slate-700">Catálogo de Productos</h3>
+          <span id="cantProductos" class="text-xs text-slate-500 font-medium"></span>
+        </div>
+        
+        <div class="mb-3 flex gap-2">
+          <input type="text" id="buscador" placeholder="🔍 Buscar palabras clave (ej: yer 1k)..."
+            class="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm">
+          <button id="btnAbrirScanner" title="Escanear con cámara"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center justify-center shrink-0">📷</button>
+        </div>
+
+        <div id="productosList" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 overflow-y-auto pr-1 flex-grow border border-slate-100 rounded-lg p-2 bg-slate-50">
+          <p class="text-slate-400 text-sm text-center py-4 col-span-full">Cargando catálogo...</p>
+        </div>
+      </div>
+
+      <div class="bg-slate-50 p-4 rounded-xl flex flex-col justify-between border border-slate-200 h-[560px]">
+        <div>
+          <h3 class="text-lg font-semibold text-slate-700 mb-3">Venta Actual</h3>
+          <div id="carritoList" class="space-y-2 overflow-y-auto max-h-[350px] pr-1 mb-4">
+            <p class="text-slate-400 text-sm text-center py-4">El carrito está vacío</p>
+          </div>
+        </div>
+        
+        <div class="border-t pt-4">
+          <div class="flex justify-between text-xl font-bold text-slate-800 mb-4">
+            <span>Total:</span>
+            <span id="totalVenta">$0.00</span>
+          </div>
+          <div class="space-y-2">
+            <button onclick="iniciarProcesoCobro('bluetooth')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-lg transition-colors shadow text-xs flex items-center justify-center gap-1.5">
+              <span>🖨️</span> Cobrar e Imprimir Bluetooth
+            </button>
+            <button onclick="iniciarProcesoCobro('pdf')" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-semibold py-2 rounded-lg transition-colors shadow text-xs flex items-center justify-center gap-1.5">
+              <span>📄</span> Cobrar y Guardar PDF / Web
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODALES DE LA APLICACIÓN -->
+  <!-- Modal Compra / Proveedor -->
+  <div id="modalCompra" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+    <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-4xl overflow-y-auto max-h-[90vh]">
+      <div class="flex justify-between items-center mb-4 border-b pb-2">
+        <h3 class="text-xl font-bold text-slate-800">📥 Registrar Factura de Compra / Proveedor</h3>
+        <button id="btnCerrarModalCompra" class="text-slate-400 hover:text-slate-600 font-bold text-lg">✕</button>
+      </div>
+
+      <div class="mb-4 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 p-3.5 rounded-xl flex items-center justify-between gap-3 shadow-sm">
+        <div>
+          <p class="text-xs font-bold text-indigo-900 flex items-center gap-1"><span>📄</span> Adjuntar Comprobante de Wayra</p>
+          <p id="textoEstadoTicket" class="text-[11px] text-indigo-700">Sube la foto del ticket para guardarla como referencia y agrega tus productos abajo.</p>
+        </div>
+        <input type="file" id="inputFotoFacturaIA" accept="image/*" class="hidden">
+        <button type="button" id="btnEscanearIA" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-lg text-xs font-bold shadow flex items-center gap-1.5 shrink-0 transition-all">
+          <span>📸</span> Adjuntar Foto Ticket
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Nombre del Proveedor *</label>
+          <input type="text" id="compraProveedor" value="Wayra" placeholder="Ej: Wayra" class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Número de Factura / Remito</label>
+          <input type="text" id="compraNroFactura" value="" placeholder="Ej: 0001" class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+        </div>
+      </div>
+
+      <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 mb-4">
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Buscar y agregar producto (ej: fideos):</label>
+        <div class="relative">
+          <input type="text" id="buscadorCompraProd" placeholder="Escriba nombre o código del producto..." class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
+          <div id="listaResultadosCompra" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border rounded-lg shadow-xl max-h-48 overflow-y-auto z-30 text-xs"></div>
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <h4 class="text-sm font-bold text-slate-700 mb-2">Productos en la Factura:</h4>
+        <div class="border rounded-lg overflow-hidden max-h-56 overflow-y-auto">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead class="bg-slate-100 text-slate-700 sticky top-0">
+              <tr>
+                <th class="p-2 w-24">Código</th>
+                <th class="p-2">Producto / Descripción</th>
+                <th class="p-2 text-center w-20">Cantidad</th>
+                <th class="p-2 text-right w-28">Costo Unit. ($)</th>
+                <th class="p-2 text-right w-24">Subtotal</th>
+                <th class="p-2 text-center w-12">Acción</th>
+              </tr>
+            </thead>
+            <tbody id="tablaItemsCompra" class="divide-y divide-slate-100">
+              <tr>
+                <td colspan="6" class="text-center py-4 text-slate-400">Usa el buscador de arriba para agregar los fideos del ticket de Wayra</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="flex justify-between items-center border-t pt-4">
+        <div class="text-base font-bold text-slate-800">
+          Total Factura: <span id="compraTotalGeneral" class="text-emerald-600 text-lg">$0.00</span>
+        </div>
+        <div class="flex gap-2">
+          <button id="btnGuardarFacturaCompra" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow">Guardar y Actualizar Costos / Stock</button>
+          <button id="btnCancelarModalCompra" class="bg-slate-300 hover:bg-slate-400 text-slate-800 px-4 py-2.5 rounded-lg text-sm font-medium">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Cliente Cobro -->
+  <div id="modalClienteCobro" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-[70]">
+    <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-sm text-center">
+      <div class="text-emerald-600 text-4xl mb-2">👤</div>
+      <h3 class="text-lg font-bold text-slate-800 mb-1">Datos del Cliente</h3>
+      <p class="text-xs text-slate-500 mb-4">Ingrese el nombre del cliente para figurar en el ticket (opcional):</p>
+      
+      <input type="text" id="nombreClienteInput" placeholder="Ej: Juan Pérez / Consumidor Final" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+
+      <div class="flex gap-2">
+        <button id="btnConfirmarCobro" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg text-xs font-bold shadow">Confirmar Venta</button>
+        <button id="btnOmitirClienteCobro" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-2 rounded-lg text-xs font-semibold">Omitir</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Escáner Cámara -->
+  <div id="modalScanner" class="hidden fixed inset-0 bg-black/80 flex flex-col items-center justify-center p-4 z-50">
+    <div class="bg-white p-4 rounded-2xl shadow-xl w-full max-w-md text-center">
+      <h3 class="text-lg font-bold text-slate-800 mb-2">Escanee el Código de Barras 📷</h3>
+      <div id="interactive" class="viewport relative w-full h-64 bg-black rounded-lg overflow-hidden mb-4">
+        <canvas class="drawingBuffer absolute top-0 left-0"></canvas>
+      </div>
+      <button id="btnCerrarScanner" class="w-full bg-rose-500 hover:bg-rose-600 text-white py-2 rounded-lg font-medium text-sm">Cancelar / Cerrar Cámara</button>
+    </div>
+  </div>
+
+  <!-- Modal Producto (Crear / Editar) -->
+  <div id="modalProducto" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white p-6 rounded-2xl shadow-xl w-full max-w-md overflow-y-auto max-h-[90vh]">
+      <div class="flex justify-between items-center mb-4">
+        <h3 id="modalProductoTitulo" class="text-xl font-bold text-slate-800">Agregar Nuevo Producto 📦</h3>
+        <button id="btnEliminarProductoModal" class="hidden bg-rose-100 hover:bg-rose-200 text-rose-700 px-2.5 py-1 rounded-lg text-xs font-bold shadow-sm">🗑️ Eliminar</button>
+      </div>
+
+      <input type="hidden" id="editProductoId">
+      
+      <div class="space-y-3">
+        <div class="flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded-xl p-3 bg-slate-50">
+          <img id="previewFoto" src="" alt="Vista previa" class="w-28 h-28 object-contain rounded-lg mb-2 hidden">
+          <div id="placeholderFoto" class="text-slate-400 text-xs text-center mb-2">📸 Sin foto asignada</div>
+          
+          <input type="file" id="inputFotoCamara" accept="image/jpeg,image/png,image/webp" class="hidden">
+          
+          <button type="button" id="btnSelFotoProd" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-semibold shadow flex items-center gap-2">🖼️ Elegir de Galería o Tomar Foto</button>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Código de Barras</label>
+          <input type="text" id="nuevoCodigo" placeholder="Ej. 779000000000" class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Nombre del Producto *</label>
+          <input type="text" id="nuevoNombre" placeholder="Ej. Agua 1L ó Papel Higenol" class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Stock Actual</label>
+            <input type="number" id="nuevoStock" placeholder="0" class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Precio Costo ($)</label>
+            <input type="number" id="nuevoCosto" step="0.01" placeholder="0.00" class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Precio Minorista ($) *</label>
+            <input type="number" id="nuevoVenta" step="0.01" placeholder="0.00" class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Precio Mayorista ($)</label>
+            <input type="number" id="nuevoMayorista" step="0.01" placeholder="0.00" class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Cant. Mínima Mayorista</label>
+            <input type="number" id="nuevoCantMayor" placeholder="6" class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Unid. por Bulto/Caja</label>
+            <input type="number" id="nuevoUnidadesBulto" placeholder="Ej: 12 ó 10" class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+          </div>
+        </div>
+
+        <div class="flex gap-2 pt-2">
+          <button type="button" id="btnGuardarProd" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg text-sm font-bold shadow">Guardar Cambios</button>
+          <button type="button" id="btnCancelarProd" class="bg-slate-300 hover:bg-slate-400 text-slate-800 px-4 py-2 rounded-lg text-sm font-medium">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TICKET TÉRMICO OCULTO PARA IMPRESIÓN -->
+  <div id="ticketImpresion" class="hidden font-mono text-[11px] w-[72mm] mx-auto bg-white text-black leading-tight">
+    <div class="text-center font-black text-lg tracking-widest mb-0.5">GO!</div>
+    <div class="text-center text-[9px] text-slate-700 mb-1.5">Punto de Venta Móvil</div>
+    <div class="border-t border-b border-black py-0.5 my-1.5 text-center font-bold tracking-widest text-[10px]">TICKET DE COMPRA</div>
+    <div class="flex justify-between text-[9px] mb-1"><span class="font-bold">Fecha/Hora:</span><span id="ticketFecha">--/--/---- --:--</span></div>
+    <div class="flex justify-between text-[9px] mb-1"><span class="font-bold">Comprobante:</span><span id="ticketIdVenta">Ticket #---</span></div>
+    <div class="flex justify-between text-[9px] mb-1"><span class="font-bold">Atendido por:</span><span id="ticketAtendidoPor">E.J</span></div>
+    <div class="flex justify-between text-[9px] mb-2"><span class="font-bold">Cliente:</span><span id="ticketCliente">Consumidor Final</span></div>
+    <div class="border-t border-black pt-1 pb-1 flex justify-between font-bold text-[9px] border-dashed">
+      <span class="w-[18%] text-left">Cant.</span>
+      <span class="w-[38%] text-left px-0.5 break-words">Descripción</span>
+      <span class="w-[20%] text-right">P.U.</span>
+      <span class="w-[24%] text-right">Importe</span>
+    </div>
+    <div class="border-b border-black mb-1.5"></div>
+    <div id="ticketItems" class="space-y-1 text-[10px]"></div>
+    <div class="border-t border-dashed border-black my-2"></div>
+    <div class="flex justify-between font-bold text-xs"><span>TOTAL</span><span id="ticketTotal">$0.00</span></div>
+    <div class="border-t border-dashed border-black my-2"></div>
+    <div class="text-center text-[10px] font-semibold mt-2">¡GRACIAS POR SU VISITA!</div>
+  </div>
+
+  <!-- PUNTO DE ENTRADA JAVASCRIPT ES6 MODULE -->
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
